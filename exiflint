@@ -43,10 +43,26 @@ check_dependencies() {
     fi
 }
 
-# Check if file is an image by trying to read EXIF data
+# Check if file is an image that could contain EXIF data
 is_image() {
     local file="$1"
-    exiftool -q -fast "$file" &> /dev/null
+    local file_output
+    
+    # Use 'file' command for fast initial check
+    file_output=$(file -b "$file" 2>/dev/null || echo "")
+    
+    # Check for image formats that support EXIF metadata
+    case "$file_output" in
+        *JPEG*|*"JFIF"*|*"Exif"*) return 0 ;;
+        *TIFF*|*"Tagged Image File Format"*) return 0 ;;
+        *PNG*|*"Portable Network Graphics"*) return 0 ;;
+        *WebP*) return 0 ;;
+        *HEIC*|*HEIF*) return 0 ;;
+        # RAW camera formats (these may show as "data" or specific camera names)
+        *Canon*|*Nikon*|*Sony*|*Fuji*|*Olympus*|*Panasonic*|*Pentax*|*Samsung*) return 0 ;;
+        *CR2*|*NEF*|*ARW*|*DNG*|*RAF*|*ORF*|*PEF*|*RW2*|*SRW*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # Check if image contains GPS data
