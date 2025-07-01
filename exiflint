@@ -1,0 +1,160 @@
+#!/bin/bash
+
+# exiflint - Check images for EXIF geolocation data
+# Exit codes: 0=pass, 1=gps data found, 2=invalid params
+
+set -euo pipefail
+
+# Script variables
+VERBOSE=false
+RECURSIVE=false
+FAILED_FILES=()
+CHECKED_COUNT=0
+FAILED_COUNT=0
+
+# Using -GPS:all to extract all GPS tags comprehensively
+
+usage() {
+    cat << EOF
+Usage: $0 [-r] [-v] [files/directories...]
+
+Check images for EXIF geolocation data that could be personally identifiable.
+
+Options:
+  -r    Recursively search directories
+  -v    Verbose output (show each file checked)
+  -h    Show this help
+
+Exit codes:
+  0     No GPS data found in any images
+  1     GPS data found in one or more images
+  2     Invalid parameters or execution error
+
+If GPS data is found, the names of affected images are printed to stdout.
+EOF
+}
+
+# Check if exiftool is available
+check_dependencies() {
+    if ! command -v exiftool &> /dev/null; then
+        echo "Error: exiftool is required but not installed" >&2
+        echo "Install with: sudo apt install libimage-exiftool-perl" >&2
+        exit 2
+    fi
+}
+
+# Check if file is an image by trying to read EXIF data
+is_image() {
+    local file="$1"
+    exiftool -q -fast "$file" &> /dev/null
+}
+
+# Check if image contains GPS data
+check_gps_data() {
+    local file="$1"
+    local gps_output
+    
+    # Extract all GPS tags at once for efficiency
+    gps_output=$(exiftool -q -GPS:all "$file" 2>/dev/null || true)
+    
+    # If any GPS data exists, file fails
+    if [[ -n "$gps_output" ]]; then
+        return 1  # GPS data found
+    fi
+    
+    return 0  # No GPS data
+}
+
+# Process a single file
+process_file() {
+    local file="$1"
+    
+    # Skip if not a regular file
+    if [[ ! -f "$file" ]]; then
+        return 0
+    fi
+    
+    # Check if it's an image
+    if ! is_image "$file"; then
+        return 0
+    fi
+    
+    CHECKED_COUNT=$((CHECKED_COUNT + 1))
+    
+    # Check for GPS data
+    if ! check_gps_data "$file"; then
+        FAILED_FILES+=("$file")
+        FAILED_COUNT=$((FAILED_COUNT + 1))
+        
+        if [[ "$VERBOSE" == true ]]; then
+            echo "$file: FAIL"
+        fi
+    else
+        if [[ "$VERBOSE" == true ]]; then
+            echo "$file: PASS"
+        fi
+    fi
+}
+
+# Process directory
+process_directory() {
+    local dir="$1"
+    local find_opts=(-type f)
+    
+    if [[ "$RECURSIVE" == false ]]; then
+        find_opts+=(-maxdepth 1)
+    fi
+    
+    while IFS= read -r -d '' file; do
+        process_file "$file"
+    done < <(find "$dir" "${find_opts[@]}" -print0 2>/dev/null || true)
+}
+
+# Parse command line arguments
+while getopts "rvh" opt; do
+    case $opt in
+        r) RECURSIVE=true ;;
+        v) VERBOSE=true ;;
+        h) usage; exit 0 ;;
+        *) echo "Invalid option. Use -h for help." >&2; exit 2 ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+# Check if any arguments provided
+if [[ $# -eq 0 ]]; then
+    echo "Error: No files or directories specified" >&2
+    usage >&2
+    exit 2
+fi
+
+# Check dependencies
+check_dependencies
+
+# Process all arguments
+for arg in "$@"; do
+    if [[ ! -e "$arg" ]]; then
+        echo "Error: '$arg' does not exist" >&2
+        exit 2
+    elif [[ -f "$arg" ]]; then
+        process_file "$arg"
+    elif [[ -d "$arg" ]]; then
+        process_directory "$arg"
+    else
+        echo "Error: '$arg' is not a file or directory" >&2
+        exit 2
+    fi
+done
+
+# Output results
+if [[ ${#FAILED_FILES[@]} -gt 0 ]]; then
+    # Print failed files to stdout (only if not verbose, since verbose already showed them)
+    if [[ "$VERBOSE" == false ]]; then
+        printf '%s\n' "${FAILED_FILES[@]}"
+    fi
+    exit 1
+else
+    # No output if all files passed
+    exit 0
+fi
