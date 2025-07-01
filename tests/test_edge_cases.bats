@@ -3,8 +3,8 @@
 # Additional edge case tests for batch processing version
 
 setup() {
-    export SCRIPT_PATH="$BATS_TEST_DIRNAME/exiflint"
-    export TEST_DIR="$BATS_TEST_DIRNAME/tests"
+    export SCRIPT_PATH="$BATS_TEST_DIRNAME/../exiflint"
+    export TEST_DIR="$BATS_TEST_DIRNAME"
     export GPS_IMAGE="$TEST_DIR/has_gps_data.jpg"
     export CLEAN_IMAGE="$TEST_DIR/no_gps_data.jpg"
     

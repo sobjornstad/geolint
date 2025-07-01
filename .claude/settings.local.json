@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:exiftool.org)",
+      "Bash(ls:*)",
+      "Bash(exiftool:*)",
+      "Bash(./exiflint:*)",
+      "Bash(echo $?)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(git init:*)",
+      "WebFetch(domain:bats-core.readthedocs.io)",
+      "Bash(bats:*)",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(shellcheck:*)"
+    ],
+    "deny": []
+  }
+}
