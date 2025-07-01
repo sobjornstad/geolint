@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# exiflint - Check images for EXIF geolocation data
+# exiflint_batch - Optimized batch version for checking EXIF geolocation data
 # Exit codes: 0=pass, 1=gps data found, 2=invalid params
 
 set -euo pipefail
@@ -9,16 +9,14 @@ set -euo pipefail
 VERBOSE=false
 RECURSIVE=false
 FAILED_FILES=()
-CHECKED_COUNT=0
 FAILED_COUNT=0
-
-# Using -GPS:all to extract all GPS tags comprehensively
 
 usage() {
     cat << EOF
 Usage: $0 [-r] [-v] [files/directories...]
 
 Check images for EXIF geolocation data that could be personally identifiable.
+Optimized batch version for faster processing of many files.
 
 Options:
   -r    Recursively search directories
@@ -34,7 +32,7 @@ If GPS data is found, the names of affected images are printed to stdout.
 EOF
 }
 
-# Check if exiftool is available
+# Check if required tools are available
 check_dependencies() {
     if ! command -v exiftool &> /dev/null; then
         echo "Error: exiftool is required but not installed" >&2
@@ -43,87 +41,136 @@ check_dependencies() {
     fi
 }
 
-# Check if file is an image that could contain EXIF data
-is_image() {
-    local file="$1"
-    local file_output
-    
-    # Use 'file' command for fast initial check
-    file_output=$(file -b "$file" 2>/dev/null || echo "")
-    
-    # Check for image formats that support EXIF metadata
-    case "$file_output" in
-        *JPEG*|*"JFIF"*|*"Exif"*) return 0 ;;
-        *TIFF*|*"Tagged Image File Format"*) return 0 ;;
-        *PNG*|*"Portable Network Graphics"*) return 0 ;;
-        *WebP*) return 0 ;;
-        *HEIC*|*HEIF*) return 0 ;;
-        # RAW camera formats (these may show as "data" or specific camera names)
-        *Canon*|*Nikon*|*Sony*|*Fuji*|*Olympus*|*Panasonic*|*Pentax*|*Samsung*) return 0 ;;
-        *CR2*|*NEF*|*ARW*|*DNG*|*RAF*|*ORF*|*PEF*|*RW2*|*SRW*) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
-# Check if image contains GPS data
-check_gps_data() {
-    local file="$1"
-    local gps_output
-    
-    # Extract all GPS tags at once for efficiency
-    gps_output=$(exiftool -q -GPS:all "$file" 2>/dev/null || true)
-    
-    # If any GPS data exists, file fails
-    if [[ -n "$gps_output" ]]; then
-        return 1  # GPS data found
-    fi
-    
-    return 0  # No GPS data
-}
-
-# Process a single file
-process_file() {
-    local file="$1"
-    
-    # Skip if not a regular file
-    if [[ ! -f "$file" ]]; then
-        return 0
-    fi
-    
-    # Check if it's an image
-    if ! is_image "$file"; then
-        return 0
-    fi
-    
-    CHECKED_COUNT=$((CHECKED_COUNT + 1))
-    
-    # Check for GPS data
-    if ! check_gps_data "$file"; then
-        FAILED_FILES+=("$file")
-        FAILED_COUNT=$((FAILED_COUNT + 1))
-        
-        if [[ "$VERBOSE" == true ]]; then
-            echo "$file: FAIL"
-        fi
-    else
-        if [[ "$VERBOSE" == true ]]; then
-            echo "$file: PASS"
-        fi
-    fi
-}
-
-# Process directory
-process_directory() {
-    local dir="$1"
+# Find all potential image files using file command in batch
+find_images() {
+    local paths=("$@")
     local find_opts=(-type f)
     
     if [[ "$RECURSIVE" == false ]]; then
         find_opts+=(-maxdepth 1)
     fi
     
+    # Build list of all files to check
+    local all_files=()
+    for path in "${paths[@]}"; do
+        if [[ -f "$path" ]]; then
+            all_files+=("$path")
+        elif [[ -d "$path" ]]; then
+            while IFS= read -r -d '' file; do
+                all_files+=("$file")
+            done < <(find "$path" "${find_opts[@]}" -print0 2>/dev/null || true)
+        fi
+    done
+    
+    if [[ ${#all_files[@]} -eq 0 ]]; then
+        return
+    fi
+    
+    # Use file command in batch to identify images
+    local temp_file_list
+    temp_file_list=$(mktemp)
+    printf '%s\n' "${all_files[@]}" > "$temp_file_list"
+    
+    # Process files in batch with file command
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^([^:]+):[[:space:]]*(.*)$ ]]; then
+            local file="${BASH_REMATCH[1]}"
+            local file_type="${BASH_REMATCH[2]}"
+            
+            # Check for image formats that support EXIF metadata
+            case "$file_type" in
+            *JPEG*|*"JFIF"*|*"Exif"*) echo "$file" ;;
+            *TIFF*|*"Tagged Image File Format"*) echo "$file" ;;
+            *PNG*|*"Portable Network Graphics"*) echo "$file" ;;
+            *WebP*) echo "$file" ;;
+            *HEIC*|*HEIF*) echo "$file" ;;
+            # RAW camera formats
+            *Canon*|*Nikon*|*Sony*|*Fuji*|*Olympus*|*Panasonic*|*Pentax*|*Samsung*) echo "$file" ;;
+            *CR2*|*NEF*|*ARW*|*DNG*|*RAF*|*ORF*|*PEF*|*RW2*|*SRW*) echo "$file" ;;
+            esac
+        fi
+    done < <(xargs -r -a "$temp_file_list" file)
+    
+    rm "$temp_file_list"
+}
+
+# Process images in batch using exiftool
+process_images_batch() {
+    local image_files=()
     while IFS= read -r -d '' file; do
-        process_file "$file"
-    done < <(find "$dir" "${find_opts[@]}" -print0 2>/dev/null || true)
+        image_files+=("$file")
+    done < <(find_images "$@" | tr '\n' '\0')
+    
+    if [[ ${#image_files[@]} -eq 0 ]]; then
+        return 0
+    fi
+    
+    
+    # Create temporary file for batch processing
+    local temp_file_list
+    temp_file_list=$(mktemp)
+    printf '%s\n' "${image_files[@]}" > "$temp_file_list"
+    
+    # Process all images in single exiftool call
+    local gps_output
+    gps_output=$(xargs -r -a "$temp_file_list" exiftool -GPS:all 2>/dev/null || true)
+    
+    # For single file, exiftool doesn't output headers, so handle differently
+    if [[ ${#image_files[@]} -eq 1 ]]; then
+        local single_file="${image_files[0]}"
+        if [[ -n "$gps_output" && "$gps_output" != *"image files read" ]]; then
+            # GPS data found
+            FAILED_FILES+=("$single_file")
+            FAILED_COUNT=$((FAILED_COUNT + 1))
+            
+            if [[ "$VERBOSE" == true ]]; then
+                echo "$single_file: FAIL"
+            fi
+        elif [[ "$VERBOSE" == true ]]; then
+            echo "$single_file: PASS"
+        fi
+    else
+        # Multiple files - parse with headers
+        local current_file=""
+        local has_gps_data=""
+        
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^======== ]]; then
+                # Process previous file if it had GPS data
+                if [[ -n "$current_file" && -n "$has_gps_data" ]]; then
+                    FAILED_FILES+=("$current_file")
+                    FAILED_COUNT=$((FAILED_COUNT + 1))
+                    
+                    if [[ "$VERBOSE" == true ]]; then
+                        echo "$current_file: FAIL"
+                    fi
+                elif [[ -n "$current_file" && "$VERBOSE" == true ]]; then
+                    echo "$current_file: PASS"
+                fi
+                
+                # Extract filename from exiftool header
+                current_file="${line#======== }"
+                has_gps_data=""
+            elif [[ -n "$line" && "$line" != *"image files read" ]]; then
+                # Non-empty line means GPS data exists
+                has_gps_data="yes"
+            fi
+        done <<< "$gps_output"
+        
+        # Handle last file
+        if [[ -n "$current_file" && -n "$has_gps_data" ]]; then
+            FAILED_FILES+=("$current_file")
+            FAILED_COUNT=$((FAILED_COUNT + 1))
+            
+            if [[ "$VERBOSE" == true ]]; then
+                echo "$current_file: FAIL"
+            fi
+        elif [[ -n "$current_file" && "$VERBOSE" == true ]]; then
+            echo "$current_file: PASS"
+        fi
+    fi
+    
+    rm "$temp_file_list"
 }
 
 # Parse command line arguments
@@ -145,32 +192,27 @@ if [[ $# -eq 0 ]]; then
     exit 2
 fi
 
-# Check dependencies
-check_dependencies
-
-# Process all arguments
+# Validate arguments exist
 for arg in "$@"; do
     if [[ ! -e "$arg" ]]; then
         echo "Error: '$arg' does not exist" >&2
         exit 2
-    elif [[ -f "$arg" ]]; then
-        process_file "$arg"
-    elif [[ -d "$arg" ]]; then
-        process_directory "$arg"
-    else
-        echo "Error: '$arg' is not a file or directory" >&2
-        exit 2
     fi
 done
 
+# Check dependencies
+check_dependencies
+
+# Process all files in batch
+process_images_batch "$@"
+
 # Output results
 if [[ ${#FAILED_FILES[@]} -gt 0 ]]; then
-    # Print failed files to stdout (only if not verbose, since verbose already showed them)
+    # Print failed files to stdout (only if not verbose)
     if [[ "$VERBOSE" == false ]]; then
         printf '%s\n' "${FAILED_FILES[@]}"
     fi
     exit 1
 else
-    # No output if all files passed
     exit 0
 fi
