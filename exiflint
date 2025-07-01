@@ -69,11 +69,12 @@ find_images() {
     # Use file command in batch to identify images
     local temp_file_list
     temp_file_list=$(mktemp)
-    printf '%s\n' "${all_files[@]}" > "$temp_file_list"
+    printf '%s\0' "${all_files[@]}" > "$temp_file_list"
     
-    # Process files in batch with file command
+    # Process files in batch with file command (using custom separator)
     while IFS= read -r line; do
-        if [[ "$line" =~ ^([^:]+):[[:space:]]*(.*)$ ]]; then
+        # Use ||| as separator (very unlikely in filenames)
+        if [[ "$line" =~ ^(.+)\|\|\|(.*)$ ]]; then
             local file="${BASH_REMATCH[1]}"
             local file_type="${BASH_REMATCH[2]}"
             
@@ -89,7 +90,7 @@ find_images() {
             *CR2*|*NEF*|*ARW*|*DNG*|*RAF*|*ORF*|*PEF*|*RW2*|*SRW*) echo "$file" ;;
             esac
         fi
-    done < <(xargs -r -a "$temp_file_list" file)
+    done < <(xargs -r -0 -a "$temp_file_list" file -F "|||")
     
     rm "$temp_file_list"
 }
@@ -109,11 +110,11 @@ process_images_batch() {
     # Create temporary file for batch processing
     local temp_file_list
     temp_file_list=$(mktemp)
-    printf '%s\n' "${image_files[@]}" > "$temp_file_list"
+    printf '%s\0' "${image_files[@]}" > "$temp_file_list"
     
     # Process all images in single exiftool call
     local gps_output
-    gps_output=$(xargs -r -a "$temp_file_list" exiftool -GPS:all 2>/dev/null || true)
+    gps_output=$(xargs -r -0 -a "$temp_file_list" exiftool -GPS:all 2>/dev/null || true)
     
     # For single file, exiftool doesn't output headers, so handle differently
     if [[ ${#image_files[@]} -eq 1 ]]; then
