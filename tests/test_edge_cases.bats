@@ -103,7 +103,7 @@ teardown() {
         fi
     done
     
-    run "$SCRIPT_PATH" "$EDGE_TEST_DIR"
+    run "$SCRIPT_PATH" -r "$EDGE_TEST_DIR"
     [ "$status" -eq 1 ]
     
     # Should find exactly 5 files with GPS data
@@ -119,7 +119,7 @@ teardown() {
     echo "#!/bin/bash" > "$EDGE_TEST_DIR/script.sh"
     mkdir -p "$EDGE_TEST_DIR/subdir"
     
-    run "$SCRIPT_PATH" -v "$EDGE_TEST_DIR"
+    run "$SCRIPT_PATH" -rv "$EDGE_TEST_DIR"
     [ "$status" -eq 1 ]
     
     # Should only process image files
@@ -133,7 +133,7 @@ teardown() {
     local empty_dir="$EDGE_TEST_DIR/empty"
     mkdir -p "$empty_dir"
     
-    run "$SCRIPT_PATH" "$empty_dir"
+    run "$SCRIPT_PATH" -r "$empty_dir"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
@@ -159,4 +159,79 @@ teardown() {
     
     # Should be identical results
     [ "$output1" = "$output2" ]
+}
+
+@test "directory without -r flag should return exit code 2" {
+    # Create directory with images
+    local test_dir="$EDGE_TEST_DIR/no_recursive"
+    mkdir -p "$test_dir"
+    cp "$GPS_IMAGE" "$test_dir/gps.jpg"
+    cp "$CLEAN_IMAGE" "$test_dir/clean.jpg"
+    
+    # Should fail with exit code 2 (invalid parameters)
+    run "$SCRIPT_PATH" "$test_dir"
+    [ "$status" -eq 2 ]
+    [[ "$output" =~ "Error:" ]]
+    [[ "$output" =~ "directory" ]]
+    [[ "$output" =~ "-r" ]]
+}
+
+@test "multiple directories without -r flag should return exit code 2" {
+    # Create multiple directories
+    local test_dir1="$EDGE_TEST_DIR/no_recursive1"
+    local test_dir2="$EDGE_TEST_DIR/no_recursive2"
+    mkdir -p "$test_dir1" "$test_dir2"
+    cp "$GPS_IMAGE" "$test_dir1/gps.jpg"
+    cp "$CLEAN_IMAGE" "$test_dir2/clean.jpg"
+    
+    # Should fail with exit code 2 even if only one directory is present
+    run "$SCRIPT_PATH" "$test_dir1" "$test_dir2"
+    [ "$status" -eq 2 ]
+    [[ "$output" =~ "Error:" ]]
+    [[ "$output" =~ "directory" ]]
+    [[ "$output" =~ "-r" ]]
+}
+
+@test "mixed files and directories without -r flag should return exit code 2" {
+    # Create a directory and use a file
+    local test_dir="$EDGE_TEST_DIR/mixed_test"
+    mkdir -p "$test_dir"
+    cp "$GPS_IMAGE" "$test_dir/gps.jpg"
+    
+    # Should fail with exit code 2 because of the directory argument
+    run "$SCRIPT_PATH" "$CLEAN_IMAGE" "$test_dir"
+    [ "$status" -eq 2 ]
+    [[ "$output" =~ "Error:" ]]
+    [[ "$output" =~ "directory" ]]
+    [[ "$output" =~ "-r" ]]
+}
+
+@test "directory with -r flag should work normally" {
+    # Create directory with images
+    local test_dir="$EDGE_TEST_DIR/with_recursive"
+    mkdir -p "$test_dir"
+    cp "$GPS_IMAGE" "$test_dir/gps.jpg"
+    cp "$CLEAN_IMAGE" "$test_dir/clean.jpg"
+    
+    # Should work normally with -r flag
+    run "$SCRIPT_PATH" -r "$test_dir"
+    [ "$status" -eq 1 ]
+    [[ "$output" =~ "gps.jpg" ]]
+}
+
+@test "glob expansion processes individual files without -r flag" {
+    # Create directory with images
+    local test_dir="$EDGE_TEST_DIR/glob_test"
+    mkdir -p "$test_dir"
+    cp "$GPS_IMAGE" "$test_dir/gps.jpg"
+    cp "$CLEAN_IMAGE" "$test_dir/clean.jpg"
+    echo "text file" > "$test_dir/readme.txt"
+    
+    # Glob expansion should work without -r since it expands to individual files
+    run bash -c "cd '$test_dir' && '$SCRIPT_PATH' -v *"
+    [ "$status" -eq 1 ]
+    [[ "$output" =~ "gps.jpg: FAIL" ]]
+    [[ "$output" =~ "clean.jpg: PASS" ]]
+    # Should not process non-image files
+    [[ ! "$output" =~ "readme.txt" ]]
 }

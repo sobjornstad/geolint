@@ -75,10 +75,12 @@ setup() {
     [[ "$output" =~ "$CLEAN_IMAGE: PASS" ]]
 }
 
-@test "processes directory without recursion" {
+@test "directory without recursion flag returns error" {
     run "$SCRIPT_PATH" "$TEST_DIR"
-    [ "$status" -eq 1 ]
-    [[ "$output" =~ "$GPS_IMAGE" ]]
+    [ "$status" -eq 2 ]
+    [[ "$output" =~ "Error:" ]]
+    [[ "$output" =~ "directory" ]]
+    [[ "$output" =~ "-r" ]]
 }
 
 @test "processes directory with recursion flag" {
@@ -88,7 +90,7 @@ setup() {
 }
 
 @test "verbose directory processing" {
-    run "$SCRIPT_PATH" -v "$TEST_DIR"
+    run "$SCRIPT_PATH" -rv "$TEST_DIR"
     [ "$status" -eq 1 ]
     [[ "$output" =~ ": FAIL" ]]
     [[ "$output" =~ ": PASS" ]]
@@ -108,16 +110,10 @@ setup() {
 }
 
 @test "requires exiftool dependency" {
-    # Temporarily rename exiftool to test dependency check
-    if command -v exiftool &> /dev/null; then
-        # Test that script would fail if exiftool missing
-        # We can't actually test this without breaking the system
-        skip "Cannot test missing exiftool without breaking system"
-    else
-        run "$SCRIPT_PATH" "$CLEAN_IMAGE"
-        [ "$status" -eq 2 ]
-        [[ "$output" =~ "exiftool is required" ]]
-    fi
+    # Simulate exiftool not being available by clearing PATH
+    run env PATH= "$SCRIPT_PATH" "$CLEAN_IMAGE"
+    [ "$status" -eq 2 ]
+    [[ "$output" =~ "exiftool is required" ]]
 }
 
 @test "handles non-image files gracefully" {

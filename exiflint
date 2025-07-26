@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# exiflint_batch - Optimized batch version for checking EXIF geolocation data
+# geolint - check for any images with embedded GPS data
 # Exit codes: 0=pass, 1=gps data found, 2=invalid params
 
 set -euo pipefail
@@ -36,7 +36,6 @@ EOF
 check_dependencies() {
     if ! command -v exiftool &> /dev/null; then
         echo "Error: exiftool is required but not installed" >&2
-        echo "Install with: sudo apt install libimage-exiftool-perl" >&2
         exit 2
     fi
 }
@@ -55,7 +54,7 @@ find_images() {
     for path in "${paths[@]}"; do
         if [[ -f "$path" ]]; then
             all_files+=("$path")
-        elif [[ -d "$path" ]]; then
+        elif [[ -d "$path" ]] && [[ "$RECURSIVE" == true ]]; then
             while IFS= read -r -d '' file; do
                 all_files+=("$file")
             done < <(find "$path" "${find_opts[@]}" -print0 2>/dev/null || true)
@@ -200,6 +199,16 @@ for arg in "$@"; do
         exit 2
     fi
 done
+
+# Validate that directories are not passed without -r flag
+if [[ "$RECURSIVE" == false ]]; then
+    for arg in "$@"; do
+        if [[ -d "$arg" ]]; then
+            echo "Error: Found directory '$arg' on the command line, but the -r flag was not used. To avoid the possibility of accidentally believing you've checked a directory when you haven't, this is forbidden. Please add the -r flag or remove the directory from your command line." >&2
+            exit 2
+        fi
+    done
+fi
 
 # Check dependencies
 check_dependencies
