@@ -4,7 +4,7 @@
       "WebFetch(domain:exiftool.org)",
       "Bash(ls:*)",
       "Bash(exiftool:*)",
-      "Bash(./exiflint:*)",
+      "Bash(./geolint:*)",
       "Bash(echo $?)",
       "Bash(mkdir:*)",
       "Bash(mv:*)",

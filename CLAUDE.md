@@ -1,7 +1,7 @@
-# EXIFLINT Project
+# Geolint Project
 
 ## Overview
-`exiflint` is a high-performance bash script that scans images for EXIF GPS metadata that could be personally identifiable. It's designed for CI/CD pipelines and automated website builds to detect potentially sensitive location data in images.
+`geolint` is a high-performance bash script that scans images for EXIF GPS metadata that could be personally identifiable. It's designed for CI/CD pipelines and automated website builds to detect potentially sensitive location data in images.
 
 ## Key Features
 - **Performance optimized**: 13.3x faster than original implementation (4.4s → 0.33s for 42 images)
@@ -12,7 +12,7 @@
 
 ## Usage
 ```bash
-./exiflint [-r] [-v] [files/directories...]
+./geolint [-r] [-v] [files/directories...]
 
 Options:
   -r    Recursively search directories
@@ -56,16 +56,16 @@ Comprehensively checks for all GPS EXIF tags including:
 tests/
 ├── has_gps_data.jpg           # Image with GPS metadata (iPhone photo)
 ├── no_gps_data.jpg            # Clean image without GPS data
-├── test_exiflint.bats         # Main functionality tests (18 tests)
-└── test_edge_cases.bats       # Edge case tests (10 tests)
+├── test_geolint.bats          # Main functionality tests
+└── test_edge_cases.bats       # Edge case tests
 ```
 
 ### Running Tests
 ```bash
 cd tests
-bats test_exiflint.bats      # Main functionality 
-bats test_edge_cases.bats    # Edge cases
-bats test_*.bats             # All tests (28 total)
+bats test_geolint.bats      # Main functionality
+bats test_edge_cases.bats   # Edge cases
+bats test_*.bats            # All tests (28 total)
 ```
 
 ### Test Coverage
@@ -105,10 +105,11 @@ bats test_*.bats             # All tests (28 total)
 - Code organization and cleanup
 
 ## Build/CI Integration
+
 Designed to run on every website build without special configuration:
 ```bash
 # Example CI usage
-./exiflint -r src/images/
+./geolint -r src/images/
 if [ $? -eq 1 ]; then
   echo "ERROR: Images contain GPS metadata"
   exit 1

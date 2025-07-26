@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
 
-# Bats tests for exiflint script
+# Bats tests for geolint script
 
 setup() {
     # Set up test environment
-    export SCRIPT_PATH="$BATS_TEST_DIRNAME/../exiflint"
+    export SCRIPT_PATH="$BATS_TEST_DIRNAME/../geolint"
     export TEST_DIR="$BATS_TEST_DIRNAME"
     export GPS_IMAGE="$TEST_DIR/has_gps_data.jpg"
     export CLEAN_IMAGE="$TEST_DIR/no_gps_data.jpg"
