@@ -15,11 +15,11 @@ usage() {
     cat << EOF
 Usage: $0 [-r] [-v] [files/directories...]
 
-Check images for EXIF geolocation data that could be personally identifiable.
-Optimized batch version for faster processing of many files.
+Check images for EXIF geolocation data.
 
 Options:
-  -r    Recursively search directories
+  -r    Include contents of directories recursively
+        (calling on directories without using -r is forbidden to avoid mistakes)
   -v    Verbose output (show each file checked)
   -h    Show this help
 
